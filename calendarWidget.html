@@ -1,0 +1,477 @@
+ <!DOCTYPE>
+<html lang="eng">
+    <head>
+        <title>Calendar Widget</title>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <style>
+            table {
+                border:1px solid #dbdbdb;
+                border-spacing: 0px;
+            }
+
+            td, th {
+                line-height: 2em;
+                text-align: center;
+                color: #999;
+
+                width: 2em;
+                height: 2em;
+
+                border-left: 1px solid #dbdbdb;
+                border-top: 1px solid #dbdbdb;
+                padding: 0px;
+                margin: 0px;
+            }
+            td:first-child {
+                border-left: 0px solid #dbdbdb;
+            }
+            th:first-child {
+                border-left: 0px solid #dbdbdb;
+            }
+            td:hover {
+                background: #dbdbdb;
+            }
+            td > span:hover{
+                color:#000;
+            }
+
+            .monthName {
+                color: #000;
+            }
+
+            .available {
+                display: block;
+                width: 100%;
+                height: 100%;
+                border-spacing: 0;
+                cursor: pointer;
+                color: #000;
+            }
+            .unavailable {
+                display: block;
+                width: 100%;
+                height: 100%;
+                cursor: not-allowed;
+                color: #999;
+            }
+
+            .highlight{
+                background: #cbffc9;
+            }
+
+            .selected{
+                background:#5ace4b;
+            }
+            .selected>span{
+                color: #fff;
+            }
+
+        </style>
+    </head>
+    <body>
+        <h1>Calendar Widget</h1>
+        <p>A calendar that allows the user to select a date range between two dates. </p>
+        <div id="elm"></div>
+
+        <!-- JS -->
+        <script src="https://code.jquery.com/jquery-1.12.4.js"></script>
+        <script src="https://code.jquery.com/ui/1.12.1/jquery-ui.js"></script>
+        <script>
+
+
+            $.widget( "aLucaProject.calendarWidget", {
+                options: {
+                    wrapperClassName: 'calendarWidget',
+                    minDate : null,
+                    maxDate : null,
+                    monthDisplay : 12
+
+                },
+
+                today : new Date(),
+
+                namesOfMonths: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+
+                weekdays: ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'],
+
+                calendar : [],
+
+                clicked: false, // used to keep track of clicked dates on calendar.
+
+                _create: function() {
+                    var currentWidget = this;
+
+                    if(!(currentWidget.options.minDate instanceof Date))
+                    {
+                        currentWidget.options.minDate = new Date(currentWidget.today.getTime());
+                    }
+
+                    if(!(currentWidget.options.maxDate instanceof Date))
+                    {
+                        currentWidget.options.maxDate = new Date(currentWidget.today.getTime());
+                    }
+
+                    // 1) Create class name for widget
+                    currentWidget.element.addClass(currentWidget.options.wrapperClassName);
+                    // 2) Draw the calendar
+                    currentWidget._drawCalendar();
+                    // 3) Will make past days unavailable in calendar
+                    currentWidget._setUnavailable();
+
+                    // 4) Make days clickable.
+                    currentWidget.element.on('click', ".available", function() {
+                        var selectedSpan = this;
+                        var date = new Date(selectedSpan.parentNode.dataset.year, selectedSpan.parentNode.dataset.month, selectedSpan.parentNode.dataset.day)
+                        console.log( date );
+
+                        // start hover effect
+                        currentWidget.element.on('mouseover', '.available', function() {
+                            var date = new Date(this.parentNode.dataset.year, this.parentNode.dataset.month, this.parentNode.dataset.day);
+                            currentWidget._clearHighlight(date);
+                            currentWidget._highlight(date);
+                        });
+
+                        if(!currentWidget.clicked){
+                            currentWidget._clearSelected();
+                            selectedSpan.parentNode.className = 'selected';
+                            currentWidget.options.minDate = date;
+                            currentWidget.clicked = true;
+
+                        }else{
+                            if(currentWidget.options.minDate > date){
+                                alert('invalid date');
+                                currentWidget._clearSelected();
+                            }else{
+                                selectedSpan.parentNode.className = 'selected'
+                                currentWidget.options.maxDate = date;
+                                currentWidget._selected(currentWidget.options.minDate, currentWidget.options.maxDate);
+                            }
+                            currentWidget.clicked = false;
+
+                            // end hover effect
+                            currentWidget.element.off('mouseover', '.available')
+                            currentWidget._clearHighlight();
+                        }
+
+                    } );
+
+                    // currentWidget._selected(currentWidget.today, new Date(2018, 5, 6));
+
+                },
+
+                _getDays: function(month, year) {
+                    return new Date(year, month + 1, 0).getDate(); // month + 1 represents the month ahead, so 0 points at the last day in the previous month.
+                },
+
+                _createMonth: function(month, year) {
+                    // Returns a array with the DAYS of the month.
+                    // 0 represents days that are in the month before or after.
+
+                    var currentWidget = this;
+
+                    var month = month || currentWidget.today.getMonth();
+                    var year = year || currentWidget.today.getFullYear();
+
+                    var totalDates = this._getDays(month, year);
+
+                    var firstDateDay = new Date(year, month, 1).getDay();
+                    var lastDateDay = new Date(year, month, totalDates).getDay();
+
+                    var days = [];
+                    for(var i = 1; i <= totalDates; i++){
+                        days.push(i);
+                    }
+                    for(var i = 0; i < firstDateDay; i++){
+                        days.splice(0, 0, 0);
+                    }
+                    for(var i = lastDateDay; i < 6; i++){
+                        days.push(0);
+                    }
+
+                    return days;
+                },
+
+                _createCalendar: function() {
+                    // Creates a 3D array(year,month,days) that holds total calendar dates.
+                    var currentWidget = this;
+
+                    var month = currentWidget.today.getMonth();
+                    var year = currentWidget.today.getFullYear();
+
+                    var calendar = new Array;
+                    calendar[year] = [];
+                    var i = 0;
+                    for(var count = 0; count < currentWidget.options.monthDisplay; count++){
+                        if(month+i > currentWidget.namesOfMonths.length - 1){
+                            year = year + 1;
+                            calendar[year] = [];
+                            month = 0;
+                            i = 0;
+                        }
+                        calendar[year][month+i] = currentWidget._createMonth(month+i, year);
+                        i++;
+                    }
+
+                    return calendar;
+                },
+
+                _drawCalendar: function() {
+                    var currentWidget = this;
+
+                    var calendar = currentWidget._createCalendar();
+                    //console.log( calendar );
+
+                    var calendarTable = document.createElement('table');
+
+                    // year
+                    for(var year = currentWidget.today.getFullYear(); year < calendar.length; year++){
+                        // console.log(calendar[year]);
+                        var calendarTableThead = document.createElement('thead');
+                        var calendarTableTr = document.createElement('tr');
+                        var calendarTableTh = document.createElement('th');
+                        calendarTableTh.colSpan = currentWidget.weekdays.length;
+                        calendarTableTh.append(year);
+                        calendarTableTr.append(calendarTableTh);
+                        calendarTableThead.append(calendarTableTr);
+                        calendarTable.append(calendarTableThead);
+
+                        // month
+                        for(var month = 0; month < calendar[year].length; month++){
+                            if(calendar[year][month] == undefined){
+                                continue;
+                            }
+                            // console.log(calendar[year][month]);
+                            // create month name heading
+                            calendarTableThead = document.createElement('thead');
+                            calendarTableTr = document.createElement('tr');
+                            calendarTableTh = document.createElement('th');
+                            calendarTableTh.colSpan = currentWidget.weekdays.length;
+                            calendarTableTh.append(currentWidget.namesOfMonths[month] + ' ' + year);
+                            calendarTableTh.className = 'monthName';
+                            calendarTableTr.append(calendarTableTh);
+                            calendarTableThead.append(calendarTableTr);
+                            calendarTable.append(calendarTableThead);
+                            // create weekdays heading
+                            calendarTableThead = document.createElement('thead');
+                            calendarTableTr = document.createElement('tr');
+                            for(var i = 0; i < currentWidget.weekdays.length; i++){
+                                calendarTableTh = document.createElement('th');
+                                calendarTableTh.append(currentWidget.weekdays[i]);
+                                calendarTableTr.append(calendarTableTh);
+                            }
+                            calendarTableThead.append(calendarTableTr);
+                            calendarTable.append(calendarTableThead);
+                            // create month body
+                            var calendarTableTbody = document.createElement('tbody');
+                            calendarTableTrow = document.createElement('tr');
+                            var x = 0;
+                            // days
+                            for(var i = 0; i < calendar[year][month].length; i++){
+                                var calendarTableTd = document.createElement('td');
+                                var calendarDay = document.createElement('span');
+                                if(calendar[year][month][i] != 0){
+
+                                    // console.log( new Date(year, month, calendar[year][month][i]) );
+                                    calendarDay.append(calendar[year][month][i]);
+                                    calendarDay.className = 'available';
+                                    calendarTableTd.append(calendarDay);
+
+                                    // create dataset (year month day)
+                                    calendarTableTd.dataset.year = year;
+                                    calendarTableTd.dataset.month = month;
+                                    calendarTableTd.dataset.day = calendar[year][month][i];
+                                }else{
+                                    calendarTableTd.append(' ');
+                                }
+                                calendarTableTrow.append(calendarTableTd);
+                                x++;
+                                if(x == 7){
+                                    calendarTableTbody.append(calendarTableTrow);
+                                    calendarTableTrow = document.createElement('tr');
+                                    x = 0;
+                                }
+                            }
+                            calendarTable.append(calendarTableTbody);
+                        }
+
+                    }
+
+                    currentWidget.element.append(calendarTable);
+                },
+
+                _setUnavailable: function( startDate = 0, endDate = 0){
+                    // sets the child span class to 'unavailable'
+                    // makes it impossible to chose those dates.
+
+                    var currentWidget = this;
+
+                    var td = $('td');
+
+                    if( startDate != 0 && endDate != 0){
+                        var startYear = startDate.getFullYear();
+                        var startMonth = startDate.getMonth();
+                        var startDay = startDate.getDate();
+
+                        var endYear = endDate.getFullYear();
+                        var endMonth = endDate.getMonth();
+                        var endDay = endDate.getDate();
+
+                        for(var i = 0; i < td.length; i++){
+                            // Start day
+                            if( td[i].dataset.year ==  startYear && td[i].dataset.month == startMonth && td[i].dataset.day == startDay ){
+                                // console.log('start = ' + i);
+                                var start = i;
+                            }
+                            // End day
+                            if( td[i].dataset.year ==  endYear && td[i].dataset.month == endMonth && td[i].dataset.day == endDay ){
+                                // console.log('end = ' + i);
+                                var end = i;
+                            }
+                        }
+                    }else{
+                        endDate = currentWidget.today;
+
+                        var endYear = endDate.getFullYear();
+                        var endMonth = endDate.getMonth();
+                        var endDay = endDate.getDate() - 1; // to make today available.
+
+                        // Start Day
+                        start = 0;
+                        // End day
+                        for(var i = 0; i < td.length; i++){
+                            if( td[i].dataset.year ==  endYear && td[i].dataset.month == endMonth && td[i].dataset.day == endDay ){
+                                // console.log('end = ' + i);
+                                var end = i;
+                            }
+                        }
+                    }
+
+                    // sets unavailable.
+                    for(var i = start; i <= end; i++){
+                        var span = td[i].childNodes;
+                        span[0].className = 'unavailable';
+                    }
+
+                },
+
+                _highlight: function(endDate) {
+                    var currentWidget = this;
+                    var td = $('td');
+
+                    var startYear = currentWidget.options.minDate.getFullYear();
+                    var startMonth = currentWidget.options.minDate.getMonth();
+                    var startDay =  currentWidget.options.minDate.getDate();
+
+                    var endYear = endDate.getFullYear();
+                    var endMonth = endDate.getMonth();
+                    var endDay = endDate.getDate();
+
+                    for(var i = 0; i < td.length; i++){
+                        // Start day
+                        if( td[i].dataset.year ==  startYear && td[i].dataset.month == startMonth && td[i].dataset.day == startDay ){
+                            // console.log('start = ' + i);
+                            var start = i + 1;// skips the first clicked td so it remains 'selected'
+                        }
+                        // End day
+                        if( td[i].dataset.year ==  endYear && td[i].dataset.month == endMonth && td[i].dataset.day == endDay ){
+                            // console.log('end = ' + i);
+                            var end = i;
+                        }
+                    }
+                    // sets selected
+                    for(var i = start; i <= end; i++){
+                        td[i].className = 'highlight';
+                    }
+                },
+
+                _clearHighlight: function(){
+                    var td = $('.highlight');
+
+                    for(var i = 0; i <= td.length-1; i++){
+                        td[i].className = '';
+                    }
+
+                },
+
+                _selected : function( startDate, endDate) {
+                    // sets td class to 'selected' to highlight the selected days.
+                    var td = $('td');
+
+                    var startYear = startDate.getFullYear();
+                    var startMonth = startDate.getMonth();
+                    var startDay = startDate.getDate();
+
+                    var endYear = endDate.getFullYear();
+                    var endMonth = endDate.getMonth();
+                    var endDay = endDate.getDate();
+
+                    for(var i = 0; i < td.length; i++){
+                        // Start day
+                        if( td[i].dataset.year ==  startYear && td[i].dataset.month == startMonth && td[i].dataset.day == startDay ){
+                            // console.log('start = ' + i);
+                            var start = i;
+                        }
+                        // End day
+                        if( td[i].dataset.year ==  endYear && td[i].dataset.month == endMonth && td[i].dataset.day == endDay ){
+                            // console.log('end = ' + i);
+                            var end = i;
+                        }
+                    }
+                    // sets selected
+                    for(var i = start; i <= end; i++){
+                        td[i].className = 'selected';
+                    }
+                },
+
+                _clearSelected: function(){
+                    var td = $('.selected');
+
+                    for(var i = 0; i <= td.length-1; i++){
+                        td[i].className = '';
+                    }
+
+                },
+
+                setMinMaxDate: function(startDate = this.today, endDate = this.today) {
+                    // you can manually input minDate  maxDate.
+                    var currentWidget = this;
+
+                    currentWidget._clearSelected();
+                    currentWidget.options.minDate = startDate;
+                    currentWidget.options.maxDate = endDate;
+                    currentWidget._selected(startDate, endDate);
+                },
+
+                setMinDate: function(startDate){
+                    currentWidget = this;
+
+                    currentWidget._clearSelected();
+                    currentWidget.options.minDate = startDate;
+                    currentWidget._selected( currentWidget.options.minDate, currentWidget.options.maxDate)
+                },
+
+                setMaxDate: function(endDate){
+                    currentWidget = this;
+
+                    if(currentWidget.options.minDate > endDate){
+                        alert('Invalid Date.');
+                    }else{
+                        currentWidget._clearSelected();
+                        currentWidget.options.maxDate = endDate;
+                        currentWidget._selected( currentWidget.options.minDate, currentWidget.options.maxDate)
+                    }
+                }
+            });
+
+            // ----- ----- ----- -----
+
+            // initialize
+            $('#elm').calendarWidget();
+
+
+            // call option method
+            console.log( $('#elm').calendarWidget('option', 'monthDisplay') );
+        </script>
+    </body>
+</html>
